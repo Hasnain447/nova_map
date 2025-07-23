@@ -1,3 +1,5 @@
+// FULL UPDATED FILE
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -40,6 +42,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
   bool _isSearching = false;
   bool _isLoading = true;
   bool _isTracking = true;
+  bool _hasStarted = false;
   List<LatLng> _routePoints = [];
   double _routeDistance = 0.0;
   double _routeDuration = 0.0;
@@ -63,38 +66,37 @@ class _NavigationScreenState extends State<NavigationScreen> {
       return;
     }
 
-    _locationStream =
-        Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.bestForNavigation,
-            distanceFilter: 5,
-          ),
-        ).listen(
+    _locationStream = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 5,
+      ),
+    ).listen(
           (Position position) {
-            if (mounted && _isTracking) {
-              setState(() {
-                _currentLocation = LatLng(
-                  position.latitude,
-                  position.longitude,
-                );
-                _isLoading = false;
-              });
-              if (_destinationLocation != null) {
-                _fetchRoute();
-              } else {
-                _mapController.move(_currentLocation, _mapController.zoom);
-              }
-            }
-          },
-          onError: (e) {
-            if (mounted) {
-              setState(() => _isLoading = false);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Location error: ${e.toString()}')),
-              );
-            }
-          },
-        );
+        if (mounted && _isTracking) {
+          setState(() {
+            _currentLocation = LatLng(
+              position.latitude,
+              position.longitude,
+            );
+            _isLoading = false;
+          });
+          if (_destinationLocation != null) {
+            _fetchRoute();
+          } else {
+            _mapController.move(_currentLocation, _mapController.zoom);
+          }
+        }
+      },
+      onError: (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Location error: ${e.toString()}')),
+          );
+        }
+      },
+    );
   }
 
   Future<void> _fetchRoute() async {
@@ -104,9 +106,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
       final response = await http.get(
         Uri.parse(
           'https://router.project-osrm.org/route/v1/driving/'
-          '${_currentLocation.longitude},${_currentLocation.latitude};'
-          '${_destinationLocation!.longitude},${_destinationLocation!.latitude}'
-          '?overview=full&geometries=geojson',
+              '${_currentLocation.longitude},${_currentLocation.latitude};'
+              '${_destinationLocation!.longitude},${_destinationLocation!.latitude}'
+              '?overview=full&geometries=geojson',
         ),
       );
 
@@ -115,8 +117,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
         final geometry = data['routes'][0]['geometry']['coordinates'];
         final routePoints = geometry
             .map<LatLng>(
-              (coord) => LatLng(coord[1].toDouble(), coord[0].toDouble()),
-            )
+                (coord) => LatLng(coord[1].toDouble(), coord[0].toDouble()))
             .toList();
 
         if (mounted) {
@@ -125,17 +126,21 @@ class _NavigationScreenState extends State<NavigationScreen> {
             _routeDistance = data['routes'][0]['distance']?.toDouble() ?? 0.0;
             _routeDuration = data['routes'][0]['duration']?.toDouble() ?? 0.0;
           });
-          _mapController.fitBounds(
-            LatLngBounds.fromPoints([_currentLocation, _destinationLocation!]),
-            options: const FitBoundsOptions(padding: EdgeInsets.all(100)),
-          );
+
+          if (!_hasStarted) {
+            _mapController.fitBounds(
+              LatLngBounds.fromPoints(
+                  [_currentLocation, _destinationLocation!]),
+              options: const FitBoundsOptions(padding: EdgeInsets.all(100)),
+            );
+          }
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Route error: ${e.toString()}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Route error: ${e.toString()}')),
+        );
       }
     }
   }
@@ -149,6 +154,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
           _routeDistance = 0.0;
           _routeDuration = 0.0;
           _isSearching = false;
+          _hasStarted = false;
         });
       return;
     }
@@ -163,6 +169,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
               ? LatLng(locations.first.latitude, locations.first.longitude)
               : null;
           _isSearching = false;
+          _hasStarted = false;
         });
 
       if (_destinationLocation != null) {
@@ -176,6 +183,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
           _routeDistance = 0.0;
           _routeDuration = 0.0;
           _isSearching = false;
+          _hasStarted = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Search error: ${e.toString()}')),
@@ -191,6 +199,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
       _routeDistance = 0.0;
       _routeDuration = 0.0;
       _destinationController.clear();
+      _hasStarted = false;
     });
   }
 
@@ -221,7 +230,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
             children: [
               TileLayer(
                 urlTemplate:
-                    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
                 subdomains: ['a', 'b', 'c'],
                 userAgentPackageName: 'com.example.navigation',
               ),
@@ -238,15 +247,18 @@ class _NavigationScreenState extends State<NavigationScreen> {
               MarkerLayer(
                 markers: [
                   Marker(
-                    width: 24,
-                    height: 24,
+                    width: 32,
+                    height: 32,
                     point: _currentLocation,
                     child: _isTracking
-                        ? const GoogleStyleLocationIcon()
+                        ? _hasStarted
+                        ? const Icon(Icons.navigation,
+                        color: Colors.blue, size: 32)
+                        : const GoogleStyleLocationIcon()
                         : const Icon(
-                            Icons.location_disabled,
-                            color: Colors.grey,
-                          ),
+                      Icons.location_disabled,
+                      color: Colors.grey,
+                    ),
                   ),
                   if (_destinationLocation != null)
                     Marker(
@@ -280,9 +292,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
                         prefixIcon: const Icon(Icons.place, color: Colors.red),
                         suffixIcon: _destinationLocation != null
                             ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: _clearDestination,
-                              )
+                          icon: const Icon(Icons.clear),
+                          onPressed: _clearDestination,
+                        )
                             : null,
                       ),
                       onSubmitted: _searchDestination,
@@ -358,6 +370,25 @@ class _NavigationScreenState extends State<NavigationScreen> {
                     ],
                   ),
                 ),
+              ),
+            ),
+          if (_destinationLocation != null && !_hasStarted)
+            Positioned(
+              bottom: 20,
+              left: 20,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.play_arrow),
+                label: const Text("Start"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                onPressed: () {
+                  setState(() => _hasStarted = true);
+                  _mapController.move(_currentLocation, 18);
+                  _fetchRoute();
+                },
               ),
             ),
         ],
